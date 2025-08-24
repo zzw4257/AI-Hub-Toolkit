@@ -3,6 +3,7 @@ const nodemailer = require('nodemailer');
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
@@ -170,4 +171,45 @@ app.delete('/api/models/:id', (req, res) => {
 
   modelsStore.splice(modelIndex, 1);
   res.json({ success: true, message: 'Model deleted successfully' });
+});
+
+// POST to test a model
+app.post('/api/models/test', async (req, res) => {
+  const { modelId, prompt } = req.body;
+
+  if (!modelId || !prompt) {
+    return res.status(400).json({ success: false, message: 'modelId and prompt are required' });
+  }
+
+  const model = modelsStore.find(m => m.id === modelId);
+
+  if (!model) {
+    return res.status(404).json({ success: false, message: 'Model not found' });
+  }
+
+  try {
+    let aiResponse;
+    // Simple logic to switch between providers. A real app would have a more robust system.
+    if (model.provider.toLowerCase() === 'openai') {
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: model.name, // e.g., "gpt-4"
+        messages: [{ role: 'user', content: prompt }],
+      }, {
+        headers: { 'Authorization': `Bearer ${model.apiKey}` }
+      });
+      aiResponse = response.data.choices[0].message.content;
+    } else {
+      // Placeholder for other providers like Anthropic, Google, etc.
+      return res.status(501).json({ success: false, message: `Provider ${model.provider} not implemented yet.` });
+    }
+
+    // Increment usage count
+    model.usage += 1;
+
+    res.json({ success: true, response: aiResponse });
+
+  } catch (error) {
+    console.error('AI API Error:', error.response ? error.response.data : error.message);
+    res.status(500).json({ success: false, message: 'Failed to get response from AI model.' });
+  }
 });

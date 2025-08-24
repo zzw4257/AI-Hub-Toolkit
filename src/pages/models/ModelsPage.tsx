@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getModels, addModel as addModelApi, deleteModel as deleteModelApi } from '@/api/models'
+import { getModels, addModel as addModelApi, deleteModel as deleteModelApi, testModel } from '@/api/models'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Plus, Settings, TestTube, BarChart3, Trash2 } from 'lucide-react'
 import { useModelsStore } from '@/store/models'
@@ -18,6 +19,13 @@ export default function ModelsPage() {
   const [apiKey, setApiKey] = useState('')
   const { models, setModels, addModel, removeModel } = useModelsStore()
   const { toast } = useToast()
+
+  // State for model testing
+  const [selectedModel, setSelectedModel] = useState<string>('')
+  const [prompt, setPrompt] = useState<string>('')
+  const [testResult, setTestResult] = useState<string>('')
+  const [isLoadingTest, setIsLoadingTest] = useState(false)
+
 
   useEffect(() => {
     const fetchModels = async () => {
@@ -63,6 +71,23 @@ export default function ModelsPage() {
       }
     } catch (error) {
       toast({ title: 'Failed to delete model', variant: 'destructive' });
+    }
+  }
+
+  const handleRunTest = async () => {
+    setIsLoadingTest(true);
+    setTestResult('');
+    try {
+      const result = await testModel(selectedModel, prompt);
+      if (result.success) {
+        setTestResult(result.response);
+      } else {
+        toast({ title: result.message, variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Failed to run test', variant: 'destructive' });
+    } finally {
+      setIsLoadingTest(false);
     }
   }
 
@@ -183,11 +208,39 @@ export default function ModelsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Select Model</Label>
+                    <Select value={selectedModel} onValueChange={setSelectedModel}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a model to test" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {models.filter(m => m.status === 'connected').map(m => (
+                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
                 <div>
                   <Label htmlFor="prompt">Test Prompt</Label>
-                  <Input id="prompt" placeholder="Enter your test prompt..." />
+                  <Input
+                    id="prompt"
+                    placeholder="Enter your test prompt..."
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                  />
                 </div>
-                <Button>Run Test</Button>
+                <Button onClick={handleRunTest} disabled={isLoadingTest || !selectedModel || !prompt}>
+                  {isLoadingTest ? 'Testing...' : 'Run Test'}
+                </Button>
+                {testResult && (
+                  <div className="p-4 border rounded-lg bg-gray-50">
+                    <h4 className="font-semibold mb-2">Test Result:</h4>
+                    <p className="text-sm whitespace-pre-wrap">{testResult}</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
