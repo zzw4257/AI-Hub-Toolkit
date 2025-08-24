@@ -1,0 +1,87 @@
+import { useState } from 'react'
+import { updateUserProfile } from '@/api/auth'
+import { useAuthStore } from '@/store/auth'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useToast } from '@/hooks/use-toast'
+
+export function SettingsPage() {
+  const { user, updateUser } = useAuthStore()
+  const { toast } = useToast()
+
+  const [name, setName] = useState(user?.name || '')
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(user?.avatar || null)
+  const [loading, setLoading] = useState(false)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      setAvatarFile(file)
+      setPreview(URL.createObjectURL(file))
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      const result = await updateUserProfile(name, avatarFile)
+
+      if (result.success && result.user) {
+        updateUser(result.user)
+        toast({ title: 'Profile updated successfully!' })
+      } else {
+        toast({ title: result.message, variant: 'destructive' })
+      }
+    } catch (error) {
+      toast({ title: 'An error occurred while updating the profile.', variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">Settings</h1>
+      <Card>
+        <CardHeader>
+          <CardTitle>User Profile</CardTitle>
+          <CardDescription>Update your name and avatar.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="flex items-center space-x-4">
+              <Avatar className="w-20 h-20">
+                <AvatarImage src={preview || undefined} />
+                <AvatarFallback>{name?.[0] || user?.email[0]}</AvatarFallback>
+              </Avatar>
+              <div className="space-y-2">
+                <Label htmlFor="avatar">Upload new avatar</Label>
+                <Input id="avatar" type="file" onChange={handleFileChange} accept="image/*" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+              />
+            </div>
+
+            <Button type="submit" disabled={loading}>
+              {loading ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

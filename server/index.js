@@ -2,12 +2,34 @@
 const nodemailer = require('nodemailer');
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/avatars', express.static(path.join(__dirname, 'public/avatars')));
+
 
 const otpStore = new Map();
+
+// --- Multer Setup for Avatar Uploads ---
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = 'server/public/avatars';
+    if (!fs.existsSync(dir)){
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    // Note: In a real app, you'd associate this with the user ID
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: avatarStorage });
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.qq.com',
@@ -63,6 +85,35 @@ app.post('/api/verify-otp', (req, res) => {
   
   otpStore.delete(email);
   res.json({ success: true, message: 'OTP verified' });
+});
+
+app.post('/api/user/profile', upload.single('avatar'), (req, res) => {
+  const { name } = req.body;
+  // In a real app, you would get the user from a session or token
+  const email = 'dummy-user@example.com';
+
+  const updatedUser = {
+    // This would come from your database/session
+    id: '1',
+    email,
+    name,
+  };
+
+  if (req.file) {
+    // Construct the URL for the avatar
+    const avatarUrl = `${req.protocol}://${req.get('host')}/avatars/${req.file.filename}`;
+    updatedUser.avatar = avatarUrl;
+  }
+
+  console.log('User profile updated:', updatedUser);
+
+  // Here you would save the updatedUser to your database
+
+  res.json({
+    success: true,
+    message: 'Profile updated successfully',
+    user: updatedUser
+  });
 });
 
 app.listen(3001, () => {
