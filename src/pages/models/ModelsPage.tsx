@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { getModels, addModel as addModelApi, deleteModel as deleteModelApi } from '@/api/models'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -6,27 +7,63 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Plus, Settings, TestTube, BarChart3 } from 'lucide-react'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { Plus, Settings, TestTube, BarChart3, Trash2 } from 'lucide-react'
 import { useModelsStore } from '@/store/models'
 import { useToast } from '@/hooks/use-toast'
 
 export default function ModelsPage() {
   const [provider, setProvider] = useState('')
+  const [name, setName] = useState('')
   const [apiKey, setApiKey] = useState('')
-  const { models, addModel, updateModel } = useModelsStore()
+  const { models, setModels, addModel, removeModel } = useModelsStore()
   const { toast } = useToast()
 
-  const handleAddModel = () => {
-    if (!provider || !apiKey) return
-    addModel({
-      name: provider,
-      provider,
-      apiKey,
-      status: 'connected'
-    })
-    toast({ title: 'Model connected successfully!' })
-    setProvider('')
-    setApiKey('')
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        const serverModels = await getModels();
+        setModels(serverModels);
+      } catch (error) {
+        toast({ title: 'Failed to fetch models', variant: 'destructive' });
+      }
+    };
+    fetchModels();
+  }, [setModels, toast]);
+
+  const handleAddModel = async () => {
+    if (!provider || !apiKey || !name) {
+      toast({ title: 'Please fill all fields', variant: 'destructive' });
+      return;
+    }
+    try {
+      const result = await addModelApi({ name, provider, apiKey });
+      if (result.success) {
+        addModel(result.model);
+        toast({ title: 'Model connected successfully!' });
+        setProvider('');
+        setApiKey('');
+        setName('');
+      } else {
+        toast({ title: result.message, variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Failed to add model', variant: 'destructive' });
+    }
+  }
+
+  const handleDeleteModel = async (id: string) => {
+    try {
+      const result = await deleteModelApi(id);
+      if (result.success) {
+        removeModel(id);
+        toast({ title: 'Model deleted successfully!' });
+      } else {
+        toast({ title: result.message, variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Failed to delete model', variant: 'destructive' });
+    }
   }
 
   return (
@@ -45,6 +82,15 @@ export default function ModelsPage() {
               <DialogTitle>Add New Model</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+              <div>
+                <Label htmlFor="name">Model Name</Label>
+                <Input
+                  id="name"
+                  placeholder="e.g., GPT-4, Claude-3"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
               <div>
                 <Label htmlFor="provider">Provider</Label>
                 <Input 
@@ -96,6 +142,27 @@ export default function ModelsPage() {
                     <Button variant="outline" size="sm">
                       <Settings className="w-4 h-4" />
                     </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete the model connection.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDeleteModel(model.id)}>
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </CardHeader>
                 <CardContent>
