@@ -1,0 +1,215 @@
+// Node.js 后端邮件服务 (需要单独运行)
+const nodemailer = require('nodemailer');
+const express = require('express');
+const cors = require('cors');
+const multer = require('multer');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use('/avatars', express.static(path.join(__dirname, 'public/avatars')));
+
+
+const otpStore = new Map();
+
+// --- In-memory store for models ---
+// In a real app, this would be a database
+let modelsStore = [
+  { id: '1', name: 'GPT-4', provider: 'OpenAI', apiKey: 'sk-xxxxxxxx', status: 'connected', usage: 1200 },
+  { id: '2', name: 'Claude-3', provider: 'Anthropic', apiKey: 'sk-xxxxxxxx', status: 'connected', usage: 856 },
+  { id: '3', name: 'Gemini Pro', provider: 'Google', apiKey: 'sk-xxxxxxxx', status: 'disconnected', usage: 0 },
+];
+
+// --- Multer Setup for Avatar Uploads ---
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = 'server/public/avatars';
+    if (!fs.existsSync(dir)){
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    // Note: In a real app, you'd associate this with the user ID
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: avatarStorage });
+
+const transporter = nodemailer.createTransport({
+  host: 'smtp.qq.com',
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER || '<email>',
+    pass: process.env.EMAIL_PASS || '<credential>'
+  }
+});
+
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+app.post('/api/send-otp', async (req, res) => {
+  const { email } = req.body;
+  const otp = generateOTP();
+
+  try {
+    await transporter.sendMail({
+      from: `"Z-AIHub" <${process.env.EMAIL_USER || '<email>'}>`,
+      to: email,
+      subject: 'Z-AIHub 登录验证码',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #7c3aed;">欢迎使用 Z-AIHub!</h2>
+          <p>您好,</p>
+          <p>您的登录验证码是：</p>
+          <div style="background: #f3f4f6; padding: 20px; text-align: center; margin: 20px 0;">
+            <span style="font-size: 32px; font-weight: bold; color: #7c3aed; letter-spacing: 5px;">${otp}</span>
+          </div>
+          <p>验证码有效期为10分钟，请及时使用。</p>
+        </div>
+      `
+    });
+
+    otpStore.set(email, { otp, expires: Date.now() + 10 * 60 * 1000 });
+    res.json({ success: true, message: 'OTP sent successfully' });
+  } catch (error) {
+    console.error('Email error:', error);
+    res.status(500).json({ success: false, message: 'Failed to send OTP' });
+  }
+});
+
+app.post('/api/verify-otp', (req, res) => {
+  const { email, otp } = req.body;
+  const stored = otpStore.get(email);
+
+  if (!stored || Date.now() > stored.expires || stored.otp !== otp) {
+    return res.json({ success: false, message: 'Invalid or expired OTP' });
+  }
+
+  otpStore.delete(email);
+  res.json({ success: true, message: 'OTP verified' });
+});
+
+app.post('/api/user/profile', upload.single('avatar'), (req, res) => {
+  const { name } = req.body;
+  // In a real app, you would get the user from a session or token
+  const email = 'dummy-user@example.com';
+
+  const updatedUser = {
+    // This would come from your database/session
+    id: '1',
+    email,
+    name,
+  };
+
+  if (req.file) {
+    // Construct the URL for the avatar
+    const avatarUrl = `${req.protocol}://${req.get('host')}/avatars/${req.file.filename}`;
+    updatedUser.avatar = avatarUrl;
+  }
+
+  console.log('User profile updated:', updatedUser);
+
+  // Here you would save the updatedUser to your database
+
+  res.json({
+    success: true,
+    message: 'Profile updated successfully',
+    user: updatedUser
+  });
+});
+
+app.listen(3001, () => {
+  console.log('Email server running on port 3001');
+});
+
+// --- Models API Endpoints ---
+
+// GET all models (without API keys)
+app.get('/api/models', (req, res) => {
+  const safeModels = modelsStore.map(({ apiKey, ...model }) => model);
+  res.json(safeModels);
+});
+
+// POST a new model
+app.post('/api/models', (req, res) => {
+  const { provider, apiKey, name } = req.body;
+
+  if (!provider || !apiKey || !name) {
+    return res.status(400).json({ success: false, message: 'Provider, name, and API key are required' });
+  }
+
+  const newModel = {
+    id: Date.now().toString(),
+    name,
+    provider,
+    apiKey, // Stored securely on the server
+    status: 'connected', // Assume connected on add
+    usage: 0,
+  };
+
+  modelsStore.push(newModel);
+
+  const { apiKey: _, ...safeNewModel } = newModel;
+  res.status(201).json({ success: true, model: safeNewModel });
+});
+
+// DELETE a model
+app.delete('/api/models/:id', (req, res) => {
+  const { id } = req.params;
+  const modelIndex = modelsStore.findIndex(m => m.id === id);
+
+  if (modelIndex === -1) {
+    return res.status(404).json({ success: false, message: 'Model not found' });
+  }
+
+  modelsStore.splice(modelIndex, 1);
+  res.json({ success: true, message: 'Model deleted successfully' });
+});
+
+// POST to test a model
+app.post('/api/models/test', async (req, res) => {
+  const { modelId, prompt } = req.body;
+
+  if (!modelId || !prompt) {
+    return res.status(400).json({ success: false, message: 'modelId and prompt are required' });
+  }
+
+  const model = modelsStore.find(m => m.id === modelId);
+
+  if (!model) {
+    return res.status(404).json({ success: false, message: 'Model not found' });
+  }
+
+  try {
+    let aiResponse;
+    // Simple logic to switch between providers. A real app would have a more robust system.
+    if (model.provider.toLowerCase() === 'openai') {
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: model.name, // e.g., "gpt-4"
+        messages: [{ role: 'user', content: prompt }],
+      }, {
+        headers: { 'Authorization': `Bearer ${model.apiKey}` }
+      });
+      aiResponse = response.data.choices[0].message.content;
+    } else {
+      // Placeholder for other providers like Anthropic, Google, etc.
+      return res.status(501).json({ success: false, message: `Provider ${model.provider} not implemented yet.` });
+    }
+
+    // Increment usage count
+    model.usage += 1;
+
+    res.json({ success: true, response: aiResponse });
+
+  } catch (error) {
+    console.error('AI API Error:', error.response ? error.response.data : error.message);
+    res.status(500).json({ success: false, message: 'Failed to get response from AI model.' });
+  }
+});

@@ -5,14 +5,14 @@ interface Model {
   id: string
   name: string
   provider: string
-  apiKey?: string
   status: 'connected' | 'disconnected'
   usage: number
 }
 
 interface ModelsState {
   models: Model[]
-  addModel: (model: Omit<Model, 'id' | 'usage'>) => void
+  setModels: (models: Model[]) => void
+  addModel: (model: Model) => void
   updateModel: (id: string, updates: Partial<Model>) => void
   removeModel: (id: string) => void
 }
@@ -20,13 +20,10 @@ interface ModelsState {
 export const useModelsStore = create<ModelsState>()(
   persist(
     (set) => ({
-      models: [
-        { id: '1', name: 'GPT-4', provider: 'OpenAI', status: 'connected', usage: 1200 },
-        { id: '2', name: 'Claude-3', provider: 'Anthropic', status: 'connected', usage: 856 },
-        { id: '3', name: 'Gemini Pro', provider: 'Google', status: 'disconnected', usage: 0 },
-      ],
+      models: [], // Initial state will be empty, fetched from backend
+      setModels: (models) => set({ models }),
       addModel: (model) => set((state) => ({
-        models: [...state.models, { ...model, id: Date.now().toString(), usage: 0 }]
+        models: [...state.models, model]
       })),
       updateModel: (id, updates) => set((state) => ({
         models: state.models.map(m => m.id === id ? { ...m, ...updates } : m)

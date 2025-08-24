@@ -6,6 +6,7 @@ import ModelsPage from "@/pages/models/ModelsPage";
 import DocsPage from "@/pages/docs/DocsPage";
 import WorkspacePage from "@/pages/workspace/WorkspacePage";
 import CommunityPage from "@/pages/community/CommunityPage";
+import { SettingsPage } from "@/pages/settings/SettingsPage";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -49,6 +50,13 @@ function App() {
             <ProtectedRoute>
               <DashboardLayout>
                 <CommunityPage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/settings" element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <SettingsPage />
               </DashboardLayout>
             </ProtectedRoute>
           } />
