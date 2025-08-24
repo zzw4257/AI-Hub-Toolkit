@@ -7,16 +7,15 @@ export async function sendOTPRequest(email: string): Promise<{ success: boolean;
       body: JSON.stringify({ email })
     })
     
+    const result = await response.json()
     if (!response.ok) {
-      throw new Error('Failed to send OTP')
+      throw new Error(result.message || 'Failed to send OTP')
     }
     
-    return await response.json()
+    return result
   } catch (error) {
-    // 临时模拟成功，实际项目中移除
-    console.log(`[MOCK] Sending OTP to ${email}`)
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    return { success: true, message: 'OTP sent successfully' }
+    const message = error instanceof Error ? error.message : 'An unknown error occurred'
+    return { success: false, message }
   }
 }
 
@@ -28,15 +27,14 @@ export async function verifyOTPRequest(email: string, otp: string): Promise<{ su
       body: JSON.stringify({ email, otp })
     })
     
+    const result = await response.json()
     if (!response.ok) {
-      throw new Error('Failed to verify OTP')
+      throw new Error(result.message || 'Failed to verify OTP')
     }
     
-    return await response.json()
+    return result
   } catch (error) {
-    // 临时模拟验证 - 接受任何6位数字
-    console.log(`[MOCK] Verifying OTP ${otp} for ${email}`)
-    await new Promise(resolve => setTimeout(resolve, 500))
-    return { success: otp.length === 6, message: otp.length === 6 ? 'OTP verified' : 'Invalid OTP' }
+    const message = error instanceof Error ? error.message : 'An unknown error occurred'
+    return { success: false, message }
   }
 }
